@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.9.0] — 2026-10-29**
 
 **Fixed**
 - **Reset domains were keyed by the reset's port name (false and missed CDC009)**: a register's reset was the bare name of its event signal in its own module, never traced through the hierarchy as clocks are. One reset net entering two modules as `i_reset_n` and `rst_n` became two reset domains (on the SerDes, 14 false CDC009 errors from its 8b10b decoder into the RX framer and FIFO), and two different resets entering two modules both as `rst_n` - the top reset and its synchronized copy - became one, hiding a real reset-domain crossing. `SlangAdapter::resolve_resets` traces each register's reset from its path in the register's module back through single-driver nets and ports to the source: a top-level port keeps its port name (unchanged results for flat designs), a register (a reset synchronizer), logic (a combined reset) or an undriven port is named by its path. New `reset_hier.sv` fixture + `ResetRenamedByPortIsOneResetDomain`, `TwoResetsBehindOnePortNameCross` (both fail before the fix); 587/587 ctest, corpus 25/25 F1 1.000.
