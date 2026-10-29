@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.10.0] — 2026-10-29**
 
 Found by fault injection on a real SerDes: of three planted synchronizer bugs, two passed as verified synchronizers.
 
