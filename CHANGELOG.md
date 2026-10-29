@@ -1,6 +1,19 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+Found on a real FPGA SerDes (two async FIFOs, an MMCM, a forwarded RX clock, pulse and level synchronizers): with 0.7.0 its clocks split into 7 domains and every correct synchronizer was an error.
+
+**Fixed**
+- **A clock from a black box split into one domain per port**: a clock whose source is an undriven instance output (a PLL/MMCM model) had no top-level root, so each submodule clock port it reached became a domain of its own (`clk_wr`, `clk_rd`, `clk`, ...). `trace_through_hierarchy` takes an undriven instance output port as a clock source, named by its hierarchical path, and `SlangAdapter::resolve_clocks` keeps such a root instead of re-tracing it. The SerDes: 3 domains (2 MMCM outputs, the RX clock) instead of 7.
+- **Synchronizers shifted by a procedural for loop were not chains**: `for (int i = 1; i < N; i++) s[i] <= s[i-1];` indexes by a loop variable, so `s` stayed one node and every such synchronizer reported CDC001 error. Procedural for loops with static bounds (one variable, `< <= > >= !=`, `++ -- += -=`, at most 1024 iterations) are unrolled (`unroll_for`); the loop variable is a static index in each iteration, for the array split and the assignments.
+- **Gray pointers were not recognized as gray**: a gray tag was set only in procedural blocks, never by a continuous assign (`assign g = b2g(b);`), never carried through a pure capture (`g_r <= g;`), and a function building the code bit by bit (`g[i] = b[i+1] ^ b[i]`, `g[W-1] = b[W-1]`) was no gray encoder. All three are recognized (continuous-assign check, `propagate_gray_captures`, `bitwise_gray_formal`).
+- **Wide gray synchronizer chains were errors**: the matcher classified only one-bit chains, so every correct async FIFO reported CDC001 error on its pointers (a known gap). A gray-coded source reaching the chain through nets and ports only may use stages as wide as the destination (`gray_source`); a binary bus through the same chain stays an error.
+- **A gray register decoded before it crosses suppressed CDC002**: the recognizer took any gray-coded source register for a safe gray crossing whatever lay on the path. The gray cases of `is_verified_safe_crossing` (and the wide-chain rule) now require a wire-only path (`wire_path`); logic between the registers - a gray-to-binary decoder in the source domain - makes the crossing a plain multi-bit one (the stress fixture's `u_gray_counter.count_out` keeps its CDC002).
+
+The SerDes now reports every documented crossing as verified (5 pulse synchronizers, 2 level synchronizers, the 4 gray-pointer crossings of both FIFOs: CDC001 info) and one error, the TX FIFO memory read in the read domain (the payload a FIFO protects by its pointers; protocol verification is out of scope - a waiver). Benchmark manifest: the async gray FIFO controls are now `info`, the wide-chain gap is narrowed to non-gray buses; README updated. New `fifo_sync.sv` fixture + `LoopShiftedArraySynchronizerIsAChain`, `BitwiseGrayPointerSynchronizedByWideChain`, `GrayDecodedBeforeCrossingIsMultiBit`, `BinaryPointerThroughWideChainIsUnsafe`, `BlackBoxPllOutputsAreClockSources` (all fail before); the regression helper `analyze_fixture` runs the pattern recognizer like the CLI; 585/585 ctest, corpus 25/25 F1 1.000.
+
 **[0.7.0] — 2026-10-29**
 
 **Fixed**
