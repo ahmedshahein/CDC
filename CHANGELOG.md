@@ -1,6 +1,16 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+Found by fault injection on a real SerDes: of three planted synchronizer bugs, two passed as verified synchronizers.
+
+**Fixed**
+- **Crossings through an if/case condition were invisible (false negatives)**: `collect_assigns` recursed into the branches of an if or case but dropped the condition, so a signal that gates an assignment - an asynchronous flag used as an enable, `if (a_r) q <= 1'b1;` - had no edge to the register. The signals of every enclosing condition (the block's own asynchronous reset excepted: the reset-domain check) are now inputs of the assignments inside, as `EdgeRole::Control` edges beside the data path (merged into it, an enable would hide a synchronizer behind logic). `Graph` keeps the role per edge (`edge_role`); `register_successors`/`register_predecessors` take `data_only`, which the synchronizer matcher and CDC006 use, so a register gated by a synchronized value is no further stage and a chain with an enable stays a chain. On the SerDes this exposed a real design bug: the TX FIFO read data is gated combinationally by a comparison against the write pointer (`data_rd = ~err_wr_rd ? mem[addr_rd] : 0`, `err_wr_rd = addr_wr == addr_rd`), captured unsynchronized in the read domain. Stress fixture +8 (the enable crossing `u_reconvergence.consumer_valid_r` -> `u_handshake`, 3 CDC001, 3 CDC003, 2 CDC008); `corpus_fifo_binary` gains CDC013 (its writes are gated by a full flag from the unsynchronized read pointer), removed from its absent rules.
+- **A synchronizer read at its first stage passed as verified**: the stage-fanout check counted only registers reached through nets, so the still-metastable first stage read through logic, or by an output port, gave CDC001 info. A stage before the last must feed the next stage only: any other register reached through nets, ports or logic, or a top-level output, is a structural warning (CDC001 warning).
+
+New `control_dep.sv` fixture + `CrossingThroughAnEnable`, `FirstStageReadThroughLogicIsFlagged`, `FirstStageReadByOutputPortIsFlagged` (fail before) and the guards `EnabledSynchronizerIsStillAChain`, `ConditionGatedConsumerIsNoStage`; 592/592 ctest, corpus 25/25 F1 1.000.
+
 **[0.9.0] — 2026-10-29**
 
 **Fixed**
