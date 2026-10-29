@@ -1230,6 +1230,7 @@ ClockResetInfo SlangAdapter::extract_clock_reset(const ProceduralBlockSymbol& pr
 
             if (is_reset_name(name)) {
                 info.reset = name;
+                info.reset_symbol = event_symbol(*ev);
                 info.reset_pol = (se.edge == EdgeKind::NegEdge) ? ir::ResetPolarity::ActiveLow
                                                                 : ir::ResetPolarity::ActiveHigh;
                 info.is_async_reset = true;
@@ -1413,12 +1414,14 @@ FrontendResult SlangAdapter::elaborate(const std::vector<std::string>& files,
     top_inst->visit(scan);
     split_arrays_ = scan.split();
     scope_paths_.clear();
+    reset_paths_.clear();
     {
         ScopePathsGuard scope_paths_guard(scope_paths_);
         SplitArraysGuard split_arrays_guard(split_arrays_);
         walk_instance(*top_inst, result.graph, "");
     }
     propagate_gray_captures(result.graph);
+    resolve_resets(result.graph);
     if (result.graph.truncated()) {
         result.errors.push_back("IR graph exceeded node or edge safety limit; analysis incomplete");
         return result;
@@ -1463,6 +1466,37 @@ void SlangAdapter::propagate_gray_captures(ir::Graph& graph) {
                 changed = true;
             }
         }
+    }
+}
+
+// The source of each register's reset: back from the reset as its module
+// sees it through nets and ports with one driver each, to a top-level port
+// (named by its port name, as before), a register (a reset synchronizer),
+// logic (a combined reset) or an undriven port, named by their path.
+void SlangAdapter::resolve_resets(ir::Graph& graph) {
+    for (const auto& [reg_id, path] : reset_paths_) {
+        const ir::Node* n = graph.find_node_by_name(path);
+        if (!n)
+            continue;
+        for (int hop = 0; hop < 64; ++hop) {
+            if (n->kind != ir::NodeKind::Net && n->kind != ir::NodeKind::Port)
+                break;
+            if (n->kind == ir::NodeKind::Port &&
+                std::count(n->hier_name.begin(), n->hier_name.end(), '.') == 1)
+                break;
+            auto preds = graph.predecessors(n->id);
+            if (preds.size() != 1)
+                break;
+            const ir::Node* pred = graph.find_node(preds.front());
+            if (!pred)
+                break;
+            n = pred;
+        }
+        std::string source = n->hier_name;
+        if (n->kind == ir::NodeKind::Port && std::count(source.begin(), source.end(), '.') == 1)
+            source = source.substr(source.rfind('.') + 1);
+        if (auto* reg = graph.find_node_mutable(reg_id))
+            reg->reset_signal = source;
     }
 }
 
@@ -1632,6 +1666,8 @@ void SlangAdapter::walk_scope(const slang::ast::Scope& scope, ir::Graph& graph,
                                 mutable_dst->reset_signal = cr.reset;
                                 mutable_dst->reset_pol = cr.reset_pol;
                                 mutable_dst->is_async_reset = cr.is_async_reset;
+                                if (cr.reset_symbol)
+                                    reset_paths_[dst_id] = symbol_path(*cr.reset_symbol, p);
                                 mutable_dst->is_gray_coded =
                                     mutable_dst->is_gray_coded || a.is_gray_transform;
                                 if (mutable_dst->module_type.empty())
@@ -1646,6 +1682,8 @@ void SlangAdapter::walk_scope(const slang::ast::Scope& scope, ir::Graph& graph,
                                 mutable_dst->reset_signal = cr.reset;
                                 mutable_dst->reset_pol = cr.reset_pol;
                                 mutable_dst->is_async_reset = cr.is_async_reset;
+                                if (cr.reset_symbol)
+                                    reset_paths_[dst_id] = symbol_path(*cr.reset_symbol, p);
                                 mutable_dst->is_gray_coded = a.is_gray_transform;
                                 if (mutable_dst->module_type.empty())
                                     mutable_dst->module_type = module_type;
