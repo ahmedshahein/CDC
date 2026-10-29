@@ -1,6 +1,15 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **Signals leaving an instance were dropped (hierarchical false negatives)**: slang represents an output port connection as the Assignment `parent = <port>`, and the port-connection code collected operands of it, which finds nothing - so no edge left any child instance through an output port. A register in one child driving a register of another clock in a sibling or the parent was invisible (the README's "Hierarchical FN"; the corpus control `hierarchical_soc` was recorded as a known gap). The connection now takes the assignment's lvalue (`collect_actual_values`, already used for task outputs). The stress fixture gains the 7 inter-instance CDC001 crossings its own comments describe (e.g. `u_uart_rx.rx_data -> u_sync_2ff_bus.src_reg`, clk_uart -> clk_bridge) and their CDC002/004/005/007/008 companions (35 -> 61 findings); `GrayCounterSuppressed` now scopes to the gray crossing inside `u_gray_counter`, whose `count_out` is a decoded binary bus (a real CDC002). The `hierarchical_soc` ambiguous control (it named a wire, not a register) becomes a positive control `u_sender.status_ff -> u_consumer.q_raw_ff`; the gap leaves `known_gaps`.
+- **The output of a clock-gate instance became a root clock**: with output ports connected, the clock resolver met the gate's `clk_o` port and took it for a root (every port counts as a clock port), so Ibex split into `clk_i` and `clk_o` with 21921 false findings. `ClockResolver::trace_through_hierarchy` walks a clock's drivers back through nets, instance ports and gating/muxing logic (not registers) to the top-level ports; of several (clock and enable of a gate), the one that clocks registers directly is the source. Only clocks that leave an instance through an output port are decided there; others keep the existing tracing.
+- **Register path search was exponential**: `find_register_paths` enumerated every simple path, though both consumers keep the first path per destination, so a CPU core hit the 10000-path limit from one register (CDC010, analysis incomplete). The search is breadth-first, expands each node once and records each destination once - linear in the graph, shortest paths - and CDC010 names the limit hit (path count or depth).
+
+Ibex (`ibex_top`, one clock) is now complete: 120 registers in `clk_i`, 0 findings, 1.7 s. New `output_port.sv` fixture + `OutputPortReachesParent`, `ClockGateInstanceKeepsRootClock`, `PathSearchIsLinearInDiamonds` (all fail before the fix); 580/580 ctest; benchmark corpus 25/25, TP 46, F1 1.000.
+
 **[0.6.0] — 2026-10-29**
 
 **Fixed**
