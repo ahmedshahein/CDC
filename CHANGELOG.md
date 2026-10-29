@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.8.0] — 2026-10-29**
 
 Found on a real FPGA SerDes (two async FIFOs, an MMCM, a forwarded RX clock, pulse and level synchronizers): with 0.7.0 its clocks split into 7 domains and every correct synchronizer was an error.
 
