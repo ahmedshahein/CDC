@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.7.0] — 2026-10-29**
 
 **Fixed**
 - **Signals leaving an instance were dropped (hierarchical false negatives)**: slang represents an output port connection as the Assignment `parent = <port>`, and the port-connection code collected operands of it, which finds nothing - so no edge left any child instance through an output port. A register in one child driving a register of another clock in a sibling or the parent was invisible (the README's "Hierarchical FN"; the corpus control `hierarchical_soc` was recorded as a known gap). The connection now takes the assignment's lvalue (`collect_actual_values`, already used for task outputs). The stress fixture gains the 7 inter-instance CDC001 crossings its own comments describe (e.g. `u_uart_rx.rx_data -> u_sync_2ff_bus.src_reg`, clk_uart -> clk_bridge) and their CDC002/004/005/007/008 companions (35 -> 61 findings); `GrayCounterSuppressed` now scopes to the gray crossing inside `u_gray_counter`, whose `count_out` is a decoded binary bus (a real CDC002). The `hierarchical_soc` ambiguous control (it named a wire, not a register) becomes a positive control `u_sender.status_ff -> u_consumer.q_raw_ff`; the gap leaves `known_gaps`.
