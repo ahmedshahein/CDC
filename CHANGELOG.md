@@ -1,6 +1,12 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **Unpacked arrays failed elaboration (zero width) or hid synchronizers**: slang's `getBitWidth()` is zero for every non-numeric type, so ports, nets and registers of unpacked arrays (`logic [31:0] rf [32]`) became zero-width nodes and graph validation rejected the design (`Node '...' has zero width`) - the Ibex core could not be analyzed at all. Widths now come from `type_width()`: the bit width, else `$bits`, else 1 for types without a static size. In addition, an unpacked array whose every access is an element select with a static index (literal, parameter or genvar, `+ - *` of those) becomes one node per element (`s[0]`, `s[1]`), found by a pre-pass over the design (`ArrayAccessScan`); a synchronizer written as an array (`s[0] <= a; s[1] <= s[0];`) is now a chain (CDC001 info/TwoFF instead of error). An array read whole, through a port or with a variable index (`rf[sel]`) stays one node, so no connection is lost. Ibex (`ibex_top`) now elaborates: 120 registers, 2099 bits (1953 flip-flops after synthesis). New `unpacked_array.sv` fixture + `UnpackedArrayPortsHaveWidth`, `UnpackedArraySynchronizerIsAChain`, `UnpackedArrayWithVariableIndexStaysOneNode` (the first two fail before the fix).
+- **Parameters, genvars and enum values became signal nodes**: operand collection named every referenced symbol, so `d & MASK` or the genvar in `w[i]` created an undriven net and an edge per use (500 of 2892 edges on Ibex, `g[k].i -> w` edges on a generate-loop filter). They are constants of the elaboration and are skipped. New `ParameterIsNoSignal` test (fails before the fix); 577/577 ctest.
+
 **[0.5.0] — 2026-10-29**
 
 **Changed**
