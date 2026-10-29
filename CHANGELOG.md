@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.5.0] — 2026-10-29**
 
 **Changed**
 - **README honesty pass**: lead with static-vs-formal scope, a verified-vs-guessed table, measured known limitations (from `benchmarks/expected/manifest.json` `known_gaps`), and a real terminal screenshot. CDC005/CDC013 called out as optional methodology checks. Features list moved below usage. `.commandcode/` added to `.gitignore`.
