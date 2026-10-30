@@ -1323,7 +1323,7 @@
   "conf_reconverge": {
    "file": "benchmarks/corpus/conformance/cdc_sync.sv",
    "top": "cf_reconverge",
-   "description": "Conformance: One source synchronized twice and recombined",
+   "description": "Conformance: One source synchronized twice and recombined (muxed_clock_domain / report_double_synchronization)",
    "expected": {
     "positive_controls": [
      {
@@ -1348,7 +1348,8 @@
      }
     ],
     "negative_controls": []
-   }
+   },
+   "config": "benchmarks/corpus/conformance/signoff.yaml"
   },
   "conf_reconverge_correlated": {
    "file": "benchmarks/corpus/conformance/cdc_sync.sv",
@@ -1886,7 +1887,7 @@
   "conf_clock_mux": {
    "file": "benchmarks/corpus/conformance/cdc_structure.sv",
    "top": "cf_clock_mux",
-   "description": "Conformance: A mux of two clocks is a domain of its own",
+   "description": "Conformance: A mux of two clocks is a domain of its own (muxed_clock_domain / report_double_synchronization)",
    "expected": {
     "positive_controls": [
      {
@@ -1898,7 +1899,8 @@
      }
     ],
     "negative_controls": []
-   }
+   },
+   "config": "benchmarks/corpus/conformance/signoff.yaml"
   },
   "conf_rst_same_name": {
    "file": "benchmarks/corpus/conformance/rdc.sv",
@@ -1997,6 +1999,60 @@
     ]
    },
    "config": "benchmarks/corpus/conformance/rdc.yaml"
+  },
+  "conf_clock_mux_default": {
+   "file": "benchmarks/corpus/conformance/cdc_structure.sv",
+   "top": "cf_clock_mux",
+   "description": "Conformance: A mux of two clocks is a domain of its own - default policy",
+   "expected": {
+    "positive_controls": [],
+    "negative_controls": [],
+    "ambiguous_controls": [
+     {
+      "rule": "CDC001",
+      "source": "cf_clock_mux.a_r",
+      "dest": "cf_clock_mux.q",
+      "exact": true,
+      "severity": "error",
+      "expected": "finding",
+      "note": "the default policy represents a clock mux by one input, so this crossing is not reported; set muxed_clock_domain (or the strict / asic_signoff profile) for sign-off"
+     }
+    ]
+   }
+  },
+  "conf_reconverge_default": {
+   "file": "benchmarks/corpus/conformance/cdc_sync.sv",
+   "top": "cf_reconverge",
+   "description": "Conformance: One source synchronized twice and recombined - default policy",
+   "expected": {
+    "positive_controls": [
+     {
+      "rule": "CDC001",
+      "source": "cf_reconverge.a_r",
+      "dest": "cf_reconverge.s0a",
+      "exact": true,
+      "severity": "info"
+     },
+     {
+      "rule": "CDC001",
+      "source": "cf_reconverge.a_r",
+      "dest": "cf_reconverge.s0b",
+      "exact": true,
+      "severity": "info"
+     }
+    ],
+    "negative_controls": [],
+    "ambiguous_controls": [
+     {
+      "rule": "CDC003",
+      "source": "cf_reconverge.a_r",
+      "exact": true,
+      "reason_contains": "synchronized twice",
+      "expected": "finding",
+      "note": "the default policy takes two synchronized single-bit paths as safe; set report_double_synchronization (or the strict / asic_signoff profile) for sign-off"
+     }
+    ]
+   }
   }
  },
  "known_gaps": [

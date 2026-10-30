@@ -78,11 +78,15 @@ std::vector<Finding> ReconvergenceAnalyzer::check_pairs(
             if (a->dest_reg_id == b->dest_reg_id)
                 continue;
 
-            // Two crossings of one source that reconverge are the hazard even
-            // when each is synchronized: independent synchronizers resolve the
-            // same transition in different cycles, so the copies disagree for
-            // a cycle wherever they meet (for a bus, bit by bit). The safe
-            // form - synchronize once, then fan out - is one crossing.
+            // Two synchronized single-bit paths of one source are taken as
+            // safe unless report_double_sync_: independent synchronizers may
+            // resolve the same transition in different cycles, so the copies
+            // disagree for a cycle where they meet (the safe form,
+            // synchronize once and fan out, is one crossing). A bus split
+            // across synchronizers reconverges with bit skew either way.
+            if (!report_double_sync_ && src->width <= 1 && has_sync_chain(a->dest_reg_id) &&
+                has_sync_chain(b->dest_reg_id))
+                continue;
 
             auto da_desc = meeting_points(graph, a->dest_reg_id);
             auto db_desc = meeting_points(graph, b->dest_reg_id);

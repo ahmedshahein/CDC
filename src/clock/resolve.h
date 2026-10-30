@@ -26,6 +26,11 @@ class ClockResolver {
    public:
     ResolveResult resolve(const ir::Graph& graph);
 
+    // Config::muxed_clock_domain (off: a mux is represented by an input).
+    void set_muxed_clock_domain(bool on) {
+        muxed_clock_domain_ = on;
+    }
+
    private:
     bool is_clock_port(const std::string& name, const ir::Graph& graph) const;
 
@@ -46,6 +51,8 @@ class ClockResolver {
     // its registers cross from both. Empty root_clock otherwise.
     ClockInfo trace_clock_mux(const std::string& clock_name, const ir::Graph& graph,
                               int depth) const;
+
+    bool muxed_clock_domain_ = false;
 
     mutable std::unordered_set<std::string> port_names_;
     mutable std::unordered_set<std::string> short_port_names_;

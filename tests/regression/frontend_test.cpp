@@ -1065,10 +1065,11 @@ TEST(FrontendTest, ParameterIsNoSignal) {
 
 namespace {
 // Elaborates and analyzes like the CLI: patterns annotated, recognizer set.
-std::vector<cdc_ns::Finding> analyze_fixture(const std::string& file, const std::string& top,
-                                             opencdc::frontend::FrontendResult& fe) {
+std::vector<cdc_ns::Finding> analyze_fixture(
+    const std::string& file, const std::string& top, opencdc::frontend::FrontendResult& fe,
+    const opencdc::frontend::FrontendOptions& options = {}) {
     opencdc::frontend::SlangAdapter adapter;
-    fe = adapter.elaborate({fixture_path(file)}, top);
+    fe = adapter.elaborate({fixture_path(file)}, top, options);
     if (!fe.ok)
         return {};
     cdc_clock::DomainExtractor de;
@@ -1317,10 +1318,23 @@ TEST(FrontendTest, DividedClockFoldsIntoItsRoot) {
         EXPECT_NE(f.rule_id, "CDC001") << f.reason;
 }
 
-TEST(FrontendTest, ClockMuxOfTwoClocksIsItsOwnDomain) {
-    // q's clock is clk_a or clk_b: a domain of its own, a_r -> q crosses.
+TEST(FrontendTest, ClockMuxIsRepresentedByAnInputByDefault) {
+    // Default policy: the mux takes the root of one input (no new domain).
     opencdc::frontend::FrontendResult fe;
-    auto findings = analyze_fixture("derived_clock.sv", "dc_mux", fe);
+    analyze_fixture("derived_clock.sv", "dc_mux", fe);
+    ASSERT_TRUE(fe.ok);
+    const auto* q = fe.graph.find_node_by_name("dc_mux.q");
+    ASSERT_NE(q, nullptr);
+    EXPECT_NE(q->root_clock, "dc_mux.mclk");
+}
+
+TEST(FrontendTest, ClockMuxOfTwoClocksIsItsOwnDomain) {
+    // muxed_clock_domain: q's clock is clk_a or clk_b - a domain of its own,
+    // so a_r -> q crosses.
+    opencdc::frontend::FrontendResult fe;
+    opencdc::frontend::FrontendOptions options;
+    options.muxed_clock_domain = true;
+    auto findings = analyze_fixture("derived_clock.sv", "dc_mux", fe, options);
     ASSERT_TRUE(fe.ok);
     const auto* q = fe.graph.find_node_by_name("dc_mux.q");
     ASSERT_NE(q, nullptr);
@@ -1388,20 +1402,30 @@ TEST(FrontendTest, ResetSynchronizedInItsOwnClockDomainIsClean) {
 
 namespace {
 std::vector<cdc_ns::Finding> reconvergence_of(const std::string& top,
-                                              opencdc::frontend::FrontendResult& fe) {
+                                              opencdc::frontend::FrontendResult& fe,
+                                              bool double_sync = false) {
     auto crossings = analyze_fixture("control_dep.sv", top, fe);
     if (!fe.ok)
         return {};
     cdc_clock::DomainExtractor de;
     auto dr = de.extract(fe.graph);
     cdc_ns::ReconvergenceAnalyzer ra;
+    ra.set_report_double_synchronization(double_sync);
     return ra.analyze(fe.graph, dr.domains, crossings);
 }
 }  // namespace
 
-TEST(FrontendTest, SourceSynchronizedTwiceReconverges) {
+TEST(FrontendTest, SourceSynchronizedTwiceIsTakenAsSafeByDefault) {
     opencdc::frontend::FrontendResult fe;
     auto reconv = reconvergence_of("cd_sync_twice", fe);
+    ASSERT_TRUE(fe.ok);
+    EXPECT_TRUE(reconv.empty());
+}
+
+TEST(FrontendTest, SourceSynchronizedTwiceReconverges) {
+    // report_double_synchronization.
+    opencdc::frontend::FrontendResult fe;
+    auto reconv = reconvergence_of("cd_sync_twice", fe, true);
     ASSERT_TRUE(fe.ok);
     ASSERT_EQ(reconv.size(), 1u);
     EXPECT_EQ(reconv[0].source_reg_name, "cd_sync_twice.a_r");

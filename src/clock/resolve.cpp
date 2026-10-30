@@ -255,9 +255,11 @@ ClockInfo ClockResolver::trace_clock(const std::string& clock_name, const ir::Gr
 
     ensure_port_index(graph);
 
-    ClockInfo muxed = trace_clock_mux(clock_name, graph, 0);
-    if (!muxed.root_clock.empty())
-        return muxed;
+    if (muxed_clock_domain_) {
+        ClockInfo muxed = trace_clock_mux(clock_name, graph, 0);
+        if (!muxed.root_clock.empty())
+            return muxed;
+    }
 
     ClockInfo through = trace_through_hierarchy(clock_name, graph);
     if (!through.root_clock.empty())

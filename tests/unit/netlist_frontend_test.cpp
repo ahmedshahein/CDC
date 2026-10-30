@@ -337,15 +337,33 @@ TEST(NetlistFrontendTest, XorCellClassifiesAsXorNotOr) {
 
 TEST(NetlistFrontendTest, MuxedClockResolvesToDefaultPathRoot) {
     // `$_MUX_ m0 (.A(clk_b), .B(clk_a), .S(clk_sel), .Y(selected_clk))` —
-    // a mux of two clocks is a clock domain of its own, named by its output,
-    // so a register on it crosses from either clock (it was represented by
-    // its default-path input clk_b, which hid crossings from that clock).
-    // The select pin is no clock: before mux input normalization the
-    // resolver picked it, yielding a bogus clk_sel domain.
+    // the muxed clock's representative root must be the default-path
+    // (select = 0) input A = clk_b, matching the RTL frontend's resolution
+    // of `sel ? clk_a : clk_b`. Before mux input normalization the resolver
+    // picked the LAST connection (the select pin), yielding a bogus
+    // (clk_a -> clk_sel) domain pair instead of (clk_a -> clk_b).
     AnalysisRequest req;
     req.input_files = {fx("mux_clock.v")};
     req.top_module = "mux_clock";
     req.input_type = InputType::Netlist;
+    Analyzer analyzer;
+    auto result = analyzer.run(req);
+    ASSERT_TRUE(result.ok) << (result.errors.empty() ? "" : result.errors.front());
+
+    const cdc::Finding* f = find_rule(result.findings, "CDC001");
+    ASSERT_NE(f, nullptr);
+    EXPECT_EQ(f->source_domain, "clk_a");
+    EXPECT_EQ(f->dest_domain, "clk_b");
+}
+
+TEST(NetlistFrontendTest, MuxedClockIsItsOwnDomainUnderSignoffPolicy) {
+    // With muxed_clock_domain the mux of clk_a and clk_b is a clock domain of
+    // its own, named by its output: a register on it crosses from either.
+    AnalysisRequest req;
+    req.input_files = {fx("mux_clock.v")};
+    req.top_module = "mux_clock";
+    req.input_type = InputType::Netlist;
+    req.config_path = std::string(FIXTURES_DIR) + "/config/signoff_policies.yaml";
     Analyzer analyzer;
     auto result = analyzer.run(req);
     ASSERT_TRUE(result.ok) << (result.errors.empty() ? "" : result.errors.front());

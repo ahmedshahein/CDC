@@ -1375,6 +1375,7 @@ FrontendResult SlangAdapter::elaborate(const std::vector<std::string>& files,
     result.input_type = "rtl";
     Compilation compilation;
     allow_user_annotation_ = options.allow_user_annotation;
+    muxed_clock_domain_ = options.muxed_clock_domain;
     frontend_warnings_.clear();
     scope_depth_ = 0;
 
@@ -1973,6 +1974,7 @@ void SlangAdapter::walk_scope(const slang::ast::Scope& scope, ir::Graph& graph,
 
 void SlangAdapter::resolve_clocks(ir::Graph& graph) {
     clock::ClockResolver resolver;
+    resolver.set_muxed_clock_domain(muxed_clock_domain_);
     auto result = resolver.resolve(graph);
 
     // Pre-build top-level port sets with a single O(N) pass.

@@ -1,6 +1,11 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Changed**
+- **The two conservative behaviors of 0.11.0 and 0.14.0 are opt-in policies; upstream's defaults are restored**: `muxed_clock_domain` (a mux of two clocks is a clock domain of its own, so its registers cross from either clock; off, the mux is represented by its default-path input, with the "requires user annotation" warning) and `report_double_synchronization` (a source synchronized by two chains that reconverge is CDC003; off, two synchronized single-bit paths are taken as safe). Both are config keys, false by default; the `strict` and `asic_signoff` profiles set both. The upstream tests asserting the defaults (`MuxedClockResolvesToDefaultPathRoot`, `SyncedPathsNotReconvergent`, `StressTest.AllClockDomainsDetected` with 4 domains) are restored, and each policy has a test in both settings (`MuxedClockIsItsOwnDomainUnderSignoffPolicy`, `SyncedTwiceIsReconvergentUnderSignoffPolicy`, `ClockMuxIsRepresentedByAnInputByDefault`, `SourceSynchronizedTwiceIsTakenAsSafeByDefault`). The netlist frontend and the analyzer's relationship pass honor `muxed_clock_domain` too. Conformance: `cf_clock_mux` and `cf_reconverge` run with `signoff.yaml`; their `_default` twins record what the default policy does not report. The correlated-source and output-port reconvergence of 0.14.0 are detections, not policies, and stay on. 610/610 ctest, corpus 73/73 F1 1.000.
+
 **[0.15.0] — 2026-10-30**
 
 **Fixed**

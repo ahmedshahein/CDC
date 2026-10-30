@@ -81,6 +81,7 @@ class SlangAdapter : public IFrontend {
 
     std::unique_ptr<slang::SourceManager> source_manager_;
     bool allow_user_annotation_ = true;
+    bool muxed_clock_domain_ = false;  // FrontendOptions::muxed_clock_domain
     // Non-fatal elaboration notes (e.g. skipped unknown-clock blocks).
     std::vector<std::string> frontend_warnings_;
     // Recursion depth guard for instance/generate nesting (walk_* recursion).

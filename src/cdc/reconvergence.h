@@ -19,8 +19,14 @@ class ReconvergenceAnalyzer {
         max_hops_ = hops < 1 ? 1 : hops;
     }
 
+    // Config::report_double_synchronization.
+    void set_report_double_synchronization(bool on) {
+        report_double_sync_ = on;
+    }
+
    private:
     int max_hops_ = 3;
+    bool report_double_sync_ = false;
     std::vector<uint64_t> find_fanout_sources(const ir::Graph& graph,
                                               const std::vector<clock::ClockDomain>& domains) const;
 
