@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.17.0] — 2026-10-30**
 
 Found on real designs: a PULP/Ibex SoC (my_soc_top, ~300 files) did not elaborate, and Verilog-2001 FIFOs lost their combinational logic.
 
