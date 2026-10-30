@@ -1,6 +1,18 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+Found on real designs: a PULP/Ibex SoC (my_soc_top, ~300 files) did not elaborate, and Verilog-2001 FIFOs lost their combinational logic.
+
+**Fixed**
+- **Library modules were elaborated as tops**: no top was given to slang, which takes every uninstantiated module for a top and elaborates it with its default parameters - type-parameterized IP (PULP AXI `axi_demux` with `axi_req_t = logic`) is then a compile error, and a correct SoC could not be analyzed. The requested top is passed (`CompilationOptions::topModules`) when a module of that name is declared; an unknown top keeps slang's choice, so the "not found" hint still lists the modules.
+- **A use above the declaration failed elaboration**: strict LRM checking rejected `assign w = x; logic x;`, accepted by the tools designs are built with (Verilator, VCS, Xcelium); `CompilationFlags::AllowUseBeforeDeclare` is set - legality only, the meaning is the same.
+- **`always @*` / `always @(a or b)` was skipped as a clocked block without a clock**, dropping the logic ("Skipped procedural block with unrecoverable clock") - combinational paths of Verilog-2001 designs, crossings through them included, were invisible. A plain `always` whose event control has no edge is combinational, like `always_comb` (`is_level_sensitive`).
+- **Concurrent assertions gave one "unrecoverable clock" warning each** (529 on the SoC), burying real warnings: blocks from assertions (`isFromAssertion`) carry no logic and are skipped silently.
+
+New `elaboration.sv` fixture + `RealDesignElaboration` (fails before); 611/611 ctest, corpus 73/73 F1 1.000.
+
 **[0.16.0] — 2026-10-30**
 
 **Changed**
