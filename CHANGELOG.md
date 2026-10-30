@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.14.0] — 2026-10-30**
 
 **Fixed**
 - **A source synchronized twice was taken for safe (CDC003 false negative) - behavior change**: `check_pairs` skipped a single-bit source whose two crossings both had synchronizer chains ("the sync chains make the reconvergence safe"). Two independent synchronizers of one signal are the reconvergence hazard: each may resolve the same transition in a different cycle, so the copies disagree for a cycle where they meet. The suppression is removed; the reason says "synchronized twice ... Synchronize once and fan out". `ReconvergenceTest.SyncedPathsNotReconvergent`, which asserted the old claim, is now `SyncedTwiceIsReconvergent`.
