@@ -1,6 +1,14 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **A source synchronized twice was taken for safe (CDC003 false negative) - behavior change**: `check_pairs` skipped a single-bit source whose two crossings both had synchronizer chains ("the sync chains make the reconvergence safe"). Two independent synchronizers of one signal are the reconvergence hazard: each may resolve the same transition in a different cycle, so the copies disagree for a cycle where they meet. The suppression is removed; the reason says "synchronized twice ... Synchronize once and fan out". `ReconvergenceTest.SyncedPathsNotReconvergent`, which asserted the old claim, is now `SyncedTwiceIsReconvergent`.
+
+**Added**
+- **CDC003 for correlated sources and at output ports**: two different sources of one clock where one derives from the other (a delayed copy, `a_one <= a_r`), each synchronized on its own, lose their relation where they meet - not seen, as CDC003 required one common source register. `check_correlated` reports such pairs (the derivation within `max_hops` registers of the source clock, `derives_from`); unrelated sources are not reported. Meeting points now include top-level output ports reached through nets and logic (`meeting_points`), not only registers. New fixture cases + `SourceSynchronizedTwiceReconverges`, `CorrelatedSourcesReconvergeAtAPort` (fail before) and the guards `SourceSynchronizedOnceDoesNotReconverge`, `IndependentSourcesDoNotReconverge`; 604/604 ctest, corpus 25/25 F1 1.000.
+
 **[0.13.0] — 2026-10-30**
 
 **Added**

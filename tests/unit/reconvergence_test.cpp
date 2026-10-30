@@ -73,9 +73,11 @@ TEST_F(ReconvergenceTest, SafeSingleBitNoHazard) {
     EXPECT_FALSE(reconv[0].reconvergence.is_hazardous);
 }
 
-TEST_F(ReconvergenceTest, SyncedPathsNotReconvergent) {
-    // Single-bit source through independent 2-stage sync chains: the sync
-    // chains make the reconvergence safe, so no CDC003 is expected.
+TEST_F(ReconvergenceTest, SyncedTwiceIsReconvergent) {
+    // Single-bit source through two independent 2-stage sync chains: each
+    // chain may resolve the same transition in a different cycle, so the
+    // copies disagree for a cycle at the consumer - the reconvergence
+    // hazard (the safe form synchronizes once and fans out).
     uint64_t src = graph.add_register("mod.src", "clk_a", 1, {"mod.sv", 5, 5});
     uint64_t meta1 = graph.add_register("mod.meta1", "clk_b", 1, {"mod.sv", 8, 5});
     uint64_t sync1 = graph.add_register("mod.sync1", "clk_b", 1, {"mod.sv", 9, 5});
@@ -94,7 +96,9 @@ TEST_F(ReconvergenceTest, SyncedPathsNotReconvergent) {
     auto crossings = crossing_analyzer.analyze(graph, dr.domains, dr.register_to_domain);
     auto reconv = reconvergence_analyzer.analyze(graph, dr.domains, crossings);
 
-    EXPECT_TRUE(reconv.empty());
+    ASSERT_EQ(reconv.size(), 1u);
+    EXPECT_EQ(reconv[0].rule_id, "CDC003");
+    EXPECT_NE(reconv[0].reason.find("synchronized twice"), std::string::npos) << reconv[0].reason;
 }
 
 TEST_F(ReconvergenceTest, OnlyCDC001CrossingsFeedReconvergence) {
