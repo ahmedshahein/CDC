@@ -1,6 +1,11 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Added**
+- **CDC009 for a reset synchronized in the wrong clock domain**: a reset synchronized in one clock domain and used as the asynchronous reset of another clock's registers releases them asynchronously to their clock - a classic RDC bug no check covered (CDC009 compares the resets of registers on a data path only). `ResetDomainAnalyzer::check_reset_crossings` reports each register whose asynchronous reset traces (`SlangAdapter::resolve_resets`) to a register of another clock domain: CDC009 error, source the synchronizer output, "its release is not synchronized to the register's clock". Not tied to `check_same_clock_reset_crossings`. New `rh_wrong_domain` / `rh_right_domain` fixture cases + `ResetSynchronizedInAnotherClockDomainIsFlagged` (fails before) and the guard `ResetSynchronizedInItsOwnClockDomainIsClean`; 600/600 ctest, corpus 25/25 F1 1.000.
+
 **[0.12.0] — 2026-10-30**
 
 **Fixed**
