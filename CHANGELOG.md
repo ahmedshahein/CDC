@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.24.0] — 2026-10-30**
 
 **Added**
 - **Clock and reset register reports** (`--clock-report <file>`, `--reset-report <file>`): plain-text inventories of the registers of each clock domain (with their reset) and of each reset signal (with its clock domains and kind: async/sync, active-low/high), then the registers with an unresolved clock and those without a reset; one register per line with its width (flip-flops) and source location, sorted by name. A review of reset distribution and domain partitioning needed a debugger before - the findings name only crossing registers. The reports are written in every mode, the JSON report is unchanged. On a PULP/Ibex `ibex_top`: 1 domain, 120 registers, 2101 flip-flops, 17 registers without reset. New `ClockAndResetReportsListRegisters`; 620/620 ctest.
