@@ -1,6 +1,11 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **Assignments to a concatenation were dropped (false negatives)**: `extract_lvalue` names no concatenation, so `{a, b} <= ...` in a procedural block and `assign {c, s} = ...` produced no node and no edge - the registers did not exist. A 2FF synchronizer written `{s1, s0} <= {s0, a_r}` (a common reset-synchronizer form) was invisible, and so was any crossing into or out of such registers. `split_concat_assignment` flattens the left-hand side and gives each element its right-hand side: the matching element of a same-shaped right-hand side concatenation (so the shift form is a chain), else the whole right-hand side; each is a direct dependency, conditions included. New `concat_lhs.sv` fixture + `ConcatenationShiftIsASynchronizer`, `ConcatenationLoadedRegistersCross`, `ContinuousConcatenationAssignFeedsTheCrossing` (all fail before); 598/598 ctest, corpus 25/25 F1 1.000.
+
 **[0.11.0] — 2026-10-30**
 
 **Fixed**
