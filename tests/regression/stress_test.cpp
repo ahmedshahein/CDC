@@ -164,7 +164,9 @@ TEST_F(StressTest, WaiverConfigSuppresses) {
 }
 
 TEST_F(StressTest, AllClockDomainsDetected) {
-    EXPECT_EQ(dr.domains.size(), 4u);
+    // The 4 clocks + the clk_bridge/clk_axi mux of u_clock_mux, a clock
+    // domain of its own.
+    EXPECT_EQ(dr.domains.size(), 5u);
 }
 
 TEST_F(StressTest, AllRulesTriggered) {

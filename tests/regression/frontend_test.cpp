@@ -1304,3 +1304,27 @@ TEST(FrontendTest, SecondStageUsedAsConditionIsNoFanout) {
     ASSERT_TRUE(fe.ok);
     EXPECT_EQ(severity_into(findings, "CDC001", "cd_stage2_condition.s0"), "info");
 }
+
+TEST(FrontendTest, DividedClockFoldsIntoItsRoot) {
+    // q is clocked by a register dividing clk_a: root clk_a, one domain.
+    opencdc::frontend::FrontendResult fe;
+    auto findings = analyze_fixture("derived_clock.sv", "dc_div", fe);
+    ASSERT_TRUE(fe.ok);
+    const auto* q = fe.graph.find_node_by_name("dc_div.q");
+    ASSERT_NE(q, nullptr);
+    EXPECT_EQ(q->root_clock, "clk_a");
+    for (const auto& f : findings)
+        EXPECT_NE(f.rule_id, "CDC001") << f.reason;
+}
+
+TEST(FrontendTest, ClockMuxOfTwoClocksIsItsOwnDomain) {
+    // q's clock is clk_a or clk_b: a domain of its own, a_r -> q crosses.
+    opencdc::frontend::FrontendResult fe;
+    auto findings = analyze_fixture("derived_clock.sv", "dc_mux", fe);
+    ASSERT_TRUE(fe.ok);
+    const auto* q = fe.graph.find_node_by_name("dc_mux.q");
+    ASSERT_NE(q, nullptr);
+    EXPECT_EQ(q->root_clock, "dc_mux.mclk");
+    EXPECT_TRUE(q->clock_is_muxed);
+    EXPECT_EQ(severity_into(findings, "CDC001", "dc_mux.q"), "error");
+}

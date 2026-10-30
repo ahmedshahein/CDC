@@ -1,6 +1,14 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **A divided clock split its root into two domains (false CDC001)**: a register clocked by a dividing register (`div <= ~div` on clk_a) traced to the divider, whose root clock was not resolved yet, and took the divider's raw clock name (`top.clk_a`) for a root next to `clk_a` - the same clock as two domains, a false crossing between them. `trace_to_top_level_source` now traces a dividing register's own clock to its source (bounded depth for dividers of dividers), so divided clocks fold into their root as documented.
+- **A mux of two clocks hid crossings (false negatives) - behavior change**: a muxed clock was represented by one input (the default path) with a "requires user annotation" warning, so a register on `sel ? clk_b : clk_a` fed from clk_a was in clk_a's domain and its crossing for `sel = 1` was never reported. A mux whose values (not its select) trace to two or more different roots is now a clock domain of its own, named by its output (`ClockResolver::trace_clock_mux`; the RTL frontend records the select operands, `Node::mux_select_inputs`), so a register on it crosses from both clocks (CDC001, and CDC005 without reset). A mux of one root (a clock and its divided copy) is unchanged. The stress fixture's `u_clock_mux` is a 5th domain (findings unchanged); the netlist mux test now names the mux domain `selected_clk`.
+
+New `derived_clock.sv` fixture + `DividedClockFoldsIntoItsRoot`, `ClockMuxOfTwoClocksIsItsOwnDomain` (both fail before); 595/595 ctest, corpus 25/25 F1 1.000.
+
 **[0.10.1] — 2026-10-30**
 
 **Fixed**

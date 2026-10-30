@@ -41,6 +41,12 @@ class ClockResolver {
     // root_clock when that does not decide the source.
     ClockInfo trace_through_hierarchy(const std::string& clock_name, const ir::Graph& graph) const;
 
+    // A clock driven by a mux whose values trace to two or more different
+    // roots is a clock domain of its own, named by the clock node, so that
+    // its registers cross from both. Empty root_clock otherwise.
+    ClockInfo trace_clock_mux(const std::string& clock_name, const ir::Graph& graph,
+                              int depth) const;
+
     mutable std::unordered_set<std::string> port_names_;
     mutable std::unordered_set<std::string> short_port_names_;
     mutable bool port_names_built_ = false;
