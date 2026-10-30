@@ -1,6 +1,14 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **A reset was taken for the clock**: in `@(posedge clk or negedge rst)` the roles were decided by name (tokens `rst`, `reset`, ...), so a reset the heuristic misses - `trst_ni` (JTAG), `IwAsyncRstIn_an` (camelCase), `rstb` - became the clock and the real clock was ignored: a fake clock domain per reset (13 registers of an SoC's JTAG TAP), no reset for RDC. The roles now come from structure, as synthesis infers them: the edge events the body's leading if tests are the asynchronous controls, exactly one untested edge event is the clock (`leading_if_symbols`, past block-local declarations); the name heuristic decides only when the structure does not.
+- **An inverted and a bypassed copy of one clock through a clock mux made a mux domain** (`muxed_clock_domain`): the mux inputs were resolved by different tracing paths - through the inverter instance to `tck`, directly to a local port name - and the two names counted as two roots. Every mux input is resolved by the same hierarchical walk (`trace_through_hierarchy` without the child-output requirement). The SoC's JTAG clock is one domain again.
+
+New `clock_roles.sv` fixture + `ClockAndResetByStructure`, `InvertedAndBypassedClockIsOneRoot` (both fail before); 613/613 ctest, corpus 73/73 F1 1.000.
+
 **[0.17.0] — 2026-10-30**
 
 Found on real designs: a PULP/Ibex SoC (my_soc_top, ~300 files) did not elaborate, and Verilog-2001 FIFOs lost their combinational logic.
