@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.19.0] — 2026-10-30**
 
 **Fixed**
 - **Synchronizers of real IP were not chains (false CDC001/CDC002 errors)**: three shapes failed. A Verilog-2001 loop `for (i=1; i<N; i=i+1)`: `unroll_for` took `++`, `+=`, `-=` steps only - now `i = i + k`, `i = i - k`, `i = k + i` too. PULP common_cells `sync`, `reg_q <= {reg_q[STAGES-2:0], serial_i}`: select bounds had to be literals - they are now static indices (literals, parameters, arithmetic of those; `lhs_select_range`). A gray pointer captured under an enable, `if (en) g_r <= g_next`: the enable is a Control edge, so the capture had two inputs and lost the gray tag - `propagate_gray_captures` follows Data edges only. On a correct Verilog-2001 async FIFO, 4 false errors become 2 verified pointer crossings; on a PULP/Ibex SoC 12 synchronizers are verified.
