@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.23.0] — 2026-10-30**
 
 **Fixed**
 - **A packed synchronizer read at its first stage passed as verified**: a packed chain is one node, so the stage-fanout check could not see which bits are read - PULP `sync` with its output taken from `reg_q[0]` (fault injection on a PULP/Ibex SoC) gave a clean sign-off. The frontend records the lowest bit of every signal read (a whole read is bit 0), leaving out the reads of an assignment's own target (the shift); a packed chain read within its first stage - its lowest tail-width bits - is tapped early (`ir::Node::packed_early_tap`), a structural warning like a scalar first-stage tap. New `ss_pulp_tap` fixture case + `PackedSynchronizerReadAtFirstStageIsFlagged` (fails before); 619/619 ctest, corpus 74/74 F1 1.000.
