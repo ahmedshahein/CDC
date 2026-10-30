@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.15.0] — 2026-10-30**
 
 **Fixed**
 - **Logic in front of a packed synchronizer passed as a chain (false negative)**: `packed_shift_chain_stages` verified the shift structure of `s <= {s[0], tail}` but accepted any tail, so `{s[0], a & e}` - logic of two source registers that can glitch into the synchronizer - was a verified 2FF. A scalar chain already failed in this case (its first stage has no direct cross-domain register predecessor). The tail must now be a signal or a select of one; otherwise the vector is no chain and the crossing is CDC001 error. New fixture cases + `LogicInFrontOfPackedSynchronizerIsNoChain` (fails before) and the guard `SelectIngressOfPackedSynchronizerIsAChain`; 606/606 ctest, corpus 25/25 F1 1.000.
