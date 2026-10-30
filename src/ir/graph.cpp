@@ -414,20 +414,18 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
     std::vector<RopeNode> rope;
     rope.push_back({src_reg_id, -1});
 
+    // Each data node is expanded once and each destination recorded once,
+    // which also breaks every cycle: a frame carries only its depth.
     struct Frame {
         uint64_t node_id;
-        int rope_idx;                          // index of this node in rope[]
-        std::unordered_set<uint64_t> on_path;  // O(1) cycle check
+        int rope_idx;  // index of this node in rope[]
+        size_t depth;  // nodes on the path, the source included
     };
 
     // Breadth-first: with each node expanded once, the recorded path to a
     // destination is a shortest one, and MAX_PATH_DEPTH bounds its length.
     std::deque<Frame> stack;
-    {
-        std::unordered_set<uint64_t> on_path;
-        on_path.insert(src_reg_id);
-        stack.push_back({src_reg_id, 0, std::move(on_path)});
-    }
+    stack.push_back({src_reg_id, 0, 1});
     result.visited_nodes = 1;
 
     // Local per-call edge tracking (not a member — must stay local)
@@ -449,8 +447,8 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
         if (!expanded.insert(f.node_id).second)
             continue;
 
-        // E3: Depth limit (on_path.size() == number of nodes on current path)
-        if (f.on_path.size() > MAX_PATH_DEPTH) {
+        // E3: Depth limit
+        if (f.depth > MAX_PATH_DEPTH) {
             result.truncated = true;
             result.truncated_by_depth = true;
             continue;
@@ -462,8 +460,8 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
                 continue;
             if ((sn->kind == NodeKind::Register && succ != src_reg_id) || is_data_node(sn->kind))
                 cone_edges.emplace_back(f.node_id, succ);
-            if (f.on_path.count(succ))
-                continue;  // O(1) cycle check
+            if (succ == src_reg_id)
+                continue;  // back to the source
 
             result.visited_nodes++;
 
@@ -485,7 +483,7 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
                 rp.src_reg_id = src_reg_id;
                 rp.dst_reg_id = succ;
                 // Walk rope backward to build node_ids in order
-                rp.node_ids.reserve(f.on_path.size() + 1);
+                rp.node_ids.reserve(f.depth + 1);
                 int idx = succ_rope_idx;
                 while (idx >= 0) {
                     rp.node_ids.push_back(rope[static_cast<size_t>(idx)].node_id);
@@ -502,8 +500,7 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
                 Frame nf;
                 nf.node_id = succ;
                 nf.rope_idx = succ_rope_idx;
-                nf.on_path = f.on_path;  // copy the small set
-                nf.on_path.insert(succ);
+                nf.depth = f.depth + 1;
                 stack.push_back(std::move(nf));
             }
         }
