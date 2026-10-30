@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.11.0] — 2026-10-30**
 
 **Fixed**
 - **A divided clock split its root into two domains (false CDC001)**: a register clocked by a dividing register (`div <= ~div` on clk_a) traced to the divider, whose root clock was not resolved yet, and took the divider's raw clock name (`top.clk_a`) for a root next to `clk_a` - the same clock as two domains, a false crossing between them. `trace_to_top_level_source` now traces a dividing register's own clock to its source (bounded depth for dividers of dividers), so divided clocks fold into their root as documented.
