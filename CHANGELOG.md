@@ -1,6 +1,14 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **A real CPU's paths were truncated (CDC010, analysis incomplete)**: the register path search stopped at 50 nodes, which a CPU's logic exceeds once every instance port is a node (46 sources in an Ibex core). Since 0.7.0 the search expands each node once, so depth costs no time, but each frame still copied its path set to count it - O(depth) memory per frame. Frames carry an integer depth, and `MAX_PATH_DEPTH` is 1000; the uncertainty propagation (CDC013) keeps its own 50-hop horizon.
+- **A handshake payload fanned out gave CDC003**: in PULP's non-decoupled 4-phase mode the held payload reaches many consumers combinationally, and each pair of consumers that met was a "reconvergence" (318 warnings on a PULP/Ibex SoC). A payload is held while it is sampled, so its copies cannot disagree: pairs involving a handshake payload (`Finding::handshake_payload`) are skipped.
+
+The PULP/Ibex SoC: complete, sign-off PASS, 70 crossings verified, no warning, 7 s. New `hs_fanout` / `hs_deep` fixture cases + `HandshakePayloadFanoutDoesNotReconverge`, `DeepCrossingIsNotTruncated` (both fail before); 618/618 ctest, corpus 74/74 F1 1.000.
+
 **[0.21.0] — 2026-10-30**
 
 **Added**
