@@ -1,6 +1,11 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Fixed**
+- **Correct handshakes got a stage-fanout warning (0.10.0 regression)**: the stricter stage-fanout check (any register reached through nets, ports, logic or conditions) ran on every stage before the last. A register copying the synchronized value - a handshake ack, an edge detector's delay - looks like one more stage, so the real last stage, also used as a condition (`if (req_s1 && !ack) data <= ...`), got a warning on a correct req/ack handshake and on a data-enable synchronizer. The strict check now applies to the first stage, the one that can be metastable; a later stage warns, as before 0.10.0, only on a second same-domain *data* successor (a deliberate 3-stage chain tapped after stage 2 - `SyncAdversarialTest.FanoutOnStage2TriggersWarning`). New `cd_stage2_condition` fixture case + `SecondStageUsedAsConditionIsNoFanout` (fails before the fix); 593/593 ctest.
+
 **[0.10.0] — 2026-10-29**
 
 Found by fault injection on a real SerDes: of three planted synchronizer bugs, two passed as verified synchronizers.
