@@ -1,6 +1,11 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[Unreleased]**
+
+**Added**
+- **`reset_policy.synchronized_crossings_safe`** (default false, upstream's behavior): a register with an asynchronous reset feeding a synchronizer chain of another clock is then no CDC009 - the reset changes the source asynchronously to the destination clock, as any data change does, and the chain resolves it. On a PULP/Ibex SoC, 12 of 17 CDC009 errors were such crossings into PULP synchronizers. A relaxation, so the strict profiles leave it off; `ResetDomainTest.ResetSynchronizerSuppressesCdc009` (the default) is unchanged. New `rh_into_sync` fixture case + `ResetCrossingIntoASynchronizer` (both settings); 615/615 ctest, corpus 73/73 F1 1.000.
+
 **[0.19.0] — 2026-10-30**
 
 **Fixed**
