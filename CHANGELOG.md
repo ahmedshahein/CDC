@@ -1,7 +1,7 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
-**[Unreleased]**
+**[0.18.0] — 2026-10-30**
 
 **Fixed**
 - **A reset was taken for the clock**: in `@(posedge clk or negedge rst)` the roles were decided by name (tokens `rst`, `reset`, ...), so a reset the heuristic misses - `trst_ni` (JTAG), `IwAsyncRstIn_an` (camelCase), `rstb` - became the clock and the real clock was ignored: a fake clock domain per reset (13 registers of an SoC's JTAG TAP), no reset for RDC. The roles now come from structure, as synthesis infers them: the edge events the body's leading if tests are the asynchronous controls, exactly one untested edge event is the clock (`leading_if_symbols`, past block-local declarations); the name heuristic decides only when the structure does not.
