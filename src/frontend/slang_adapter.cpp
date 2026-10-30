@@ -374,6 +374,42 @@ class SplitArraysGuard {
     const std::unordered_set<const Symbol*>* previous_;
 };
 
+// The lowest bit of each signal read anywhere (a whole read is bit 0), but
+// for the reads of an assignment's own target (a shift reading itself): a
+// packed synchronizer read in its first stage is tapped early
+// (ir::Node::packed_early_tap).
+static thread_local std::unordered_map<std::string, int64_t> g_lowest_bit_read;
+static thread_local const std::string* g_reading_for_lhs = nullptr;
+static thread_local int64_t g_select_lo = 0;
+
+// Sets a thread-local to `value` for the lifetime of the guard and restores
+// the previous value on every exit, an exception included (as
+// ScopePathsGuard does for g_scope_paths).
+template <typename T>
+class ScopedValue {
+   public:
+    ScopedValue(T& var, T value) : var_(var), previous_(var) {
+        var_ = value;
+    }
+    ~ScopedValue() {
+        var_ = previous_;
+    }
+    ScopedValue(const ScopedValue&) = delete;
+    ScopedValue& operator=(const ScopedValue&) = delete;
+
+   private:
+    T& var_;
+    T previous_;
+};
+
+static void record_read(const std::string& name) {
+    if (g_reading_for_lhs && name == *g_reading_for_lhs)
+        return;
+    auto [it, fresh] = g_lowest_bit_read.emplace(name, g_select_lo);
+    if (!fresh && g_select_lo < it->second)
+        it->second = g_select_lo;
+}
+
 // Node name of the element select `value[selector]` when value is a split
 // array, else nullopt.
 static std::optional<std::string> split_element_name(const ElementSelectExpression& es,
@@ -520,6 +556,7 @@ static void collect_named_values(const Expression& expr, const std::string& pref
                 width = type_width(var.getType());
             }
         }
+        record_read(name);
         out.push_back({name, width});
     } else if (expr.kind == ExpressionKind::BinaryOp) {
         auto& binary = static_cast<const BinaryExpression&>(expr);
@@ -543,10 +580,17 @@ static void collect_named_values(const Expression& expr, const std::string& pref
             out.push_back({*element, type_width(*expr.type)});
             return;
         }
-        collect_named_values(es.value(), prefix, out, formal_map);
+        auto index = static_index(es.selector());
+        {
+            ScopedValue<int64_t> select_lo(g_select_lo, index && *index >= 0 ? *index : 0);
+            collect_named_values(es.value(), prefix, out, formal_map);
+        }
         collect_named_values(es.selector(), prefix, out, formal_map);
     } else if (expr.kind == ExpressionKind::RangeSelect) {
         auto& rs = static_cast<const RangeSelectExpression&>(expr);
+        auto lo = rs.getSelectionKind() == RangeSelectionKind::Simple ? static_index(rs.right())
+                                                                      : static_index(rs.left());
+        ScopedValue<int64_t> select_lo(g_select_lo, lo && *lo >= 0 ? *lo : 0);
         collect_named_values(rs.value(), prefix, out, formal_map);
     } else if (expr.kind == ExpressionKind::Concatenation) {
         auto& cat = static_cast<const ConcatenationExpression&>(expr);
@@ -1048,7 +1092,10 @@ static void collect_assigns(const Statement& stmt, const std::string& prefix,
                         }
                     }
                     std::vector<std::pair<std::string, uint32_t>> rhs_ops;
-                    collect_named_values(assign.right(), prefix, rhs_ops, formal_map);
+                    {
+                        ScopedValue<const std::string*> reading(g_reading_for_lhs, &resolved_lhs);
+                        collect_named_values(assign.right(), prefix, rhs_ops, formal_map);
+                    }
                     bool is_gray_transform = false;
                     ir::LogicType logic_type = ir::LogicType::Unknown;
                     bool is_multi_operand = false;
@@ -1584,6 +1631,9 @@ class WalkStateGuard {
         g_control_operands.clear();
         g_branch_path.clear();
         g_async_reset_symbol = nullptr;
+        g_lowest_bit_read.clear();
+        g_reading_for_lhs = nullptr;
+        g_select_lo = 0;
     }
 };
 
@@ -1748,6 +1798,16 @@ FrontendResult SlangAdapter::elaborate(const std::vector<std::string>& files,
         walk_instance(*top_inst, result.graph, "");
     }
     propagate_gray_captures(result.graph);
+    // A packed synchronizer read within its first stage (its lowest
+    // tail-width bits) other than by its own shift is tapped early.
+    for (auto& node : result.graph.nodes_mutable()) {
+        if (node.kind != ir::NodeKind::Register || node.packed_shift_depth < 2)
+            continue;
+        auto it = g_lowest_bit_read.find(node.hier_name);
+        if (it != g_lowest_bit_read.end() &&
+            it->second < static_cast<int64_t>(node.width / node.packed_shift_depth))
+            node.packed_early_tap = true;
+    }
     resolve_resets(result.graph);
     if (result.graph.truncated()) {
         result.errors.push_back("IR graph exceeded node or edge safety limit; analysis incomplete");
