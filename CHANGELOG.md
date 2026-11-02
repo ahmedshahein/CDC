@@ -1,6 +1,17 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[0.26.0] — 2026-11-02**
+
+**Added**
+- **`set_case_analysis 0|1 <ports>`** in the SDC reader (`ClockConstraints::case_analysis`; `rising`/`falling` ignored with a warning): the mode the design is checked in. CDC014 follows a reset mux whose select is a port held constant - the usual test-mode reset bypass (`test_mode ? rst_n : rst_sync`) resolves to the synchronized reset at `test_mode` 0, to the raw port at 1. New `ParseSdcCaseAnalysis`.
+
+**Fixed**
+- **CDC014 flagged the stages of a reset synchronizer behind a mux**: a register counted as a reset synchronizer only when its output was a reset directly, so a synchronizer feeding a test-mode bypass mux was reported as released by the raw reset (2 findings where the mux is the one real question). The reset sources are now traced back from every asynchronous reset through logic.
+- **A logic reset was named by its internal node** (`top.rst_dft$comb`); now `top.rst_dft`, and a reset traced to a port by the port name.
+
+New `rr_dft` fixture case + `TestModeResetBypassWithoutCaseAnalysis`, `...InFunctionalMode`, `...InTestMode`; 628/628 ctest, corpus 74/74 F1 1.000.
+
 **[0.25.0] — 2026-11-02**
 
 **Added**
