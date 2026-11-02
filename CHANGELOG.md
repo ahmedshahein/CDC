@@ -1,6 +1,11 @@
 **Changelog**
 All notable changes to OpenCDC will be documented in this file.
 
+**[0.25.0] — 2026-11-02**
+
+**Added**
+- **CDC014 `unsynchronized_reset_release`** (opt-in, `reset_policy.check_reset_release: true`): an asynchronous reset from a port or from logic that reaches a clock domain without a reset synchronizer of that domain - its release is asynchronous to the registers' clock (metastability, registers leaving reset in different cycles). The registers that form a reset synchronizer (up to four stages on the same reset and clock, ending on a register used as a reset) are exempt; a reset synchronized in another clock domain stays CDC009. One error per reset and clock domain (source: the reset, dest: the first register, the count in the reason), so a block whose reset is synchronized outside it waives it in one line (`CDC014 rst_ni * * * "<reason>" @<owner>`). Off by default: no change for existing runs. On a PULP/Ibex `ibex_top`: 1 finding (`rst_ni`, a port reset of the block); a SerDes top: 3 (one reset into 3 clock domains). New `reset_release.sv` fixture + 4 regression tests; 624/624 ctest, corpus 74/74 F1 1.000.
+
 **[0.24.0] — 2026-10-30**
 
 **Added**
