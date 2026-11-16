@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <deque>
+#include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 namespace opencdc::ir {
 
@@ -414,8 +416,7 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
 
     struct Frame {
         uint64_t node_id;
-        int rope_idx;  // index of this node in rope[]
-        bool has_comb;
+        int rope_idx;                          // index of this node in rope[]
         std::unordered_set<uint64_t> on_path;  // O(1) cycle check
     };
 
@@ -425,20 +426,24 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
     {
         std::unordered_set<uint64_t> on_path;
         on_path.insert(src_reg_id);
-        stack.push_back({src_reg_id, 0, false, std::move(on_path)});
+        stack.push_back({src_reg_id, 0, std::move(on_path)});
     }
     result.visited_nodes = 1;
 
     // Local per-call edge tracking (not a member — must stay local)
     std::unordered_set<uint64_t> visited_edges;
-    // Every consumer keeps one path per destination register, so each data
-    // node is expanded once and each destination recorded once: enumerating
-    // every simple path is exponential in the combinational fan-in/fan-out
-    // (a CPU core hit max_paths from one register).
+    // Each data node is expanded once and each destination recorded once:
+    // enumerating every simple path is exponential in the combinational
+    // fan-in/fan-out (a CPU core hit max_paths from one register). The edges
+    // the expansion meets are kept, so the properties of *every* path to a
+    // destination are computed afterwards (below), not those of the path met
+    // first.
     std::unordered_set<uint64_t> expanded;
     std::unordered_set<uint64_t> reached;
+    std::vector<std::pair<uint64_t, uint64_t>> cone_edges;
+    bool stop = false;
 
-    while (!stack.empty()) {
+    while (!stack.empty() && !stop) {
         Frame f = std::move(stack.front());
         stack.pop_front();
         if (!expanded.insert(f.node_id).second)
@@ -452,13 +457,15 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
         }
 
         for (uint64_t succ : successors(f.node_id)) {
+            const Node* sn = find_node(succ);
+            if (!sn)
+                continue;
+            if ((sn->kind == NodeKind::Register && succ != src_reg_id) || is_data_node(sn->kind))
+                cone_edges.emplace_back(f.node_id, succ);
             if (f.on_path.count(succ))
                 continue;  // O(1) cycle check
 
             result.visited_nodes++;
-            const Node* sn = find_node(succ);
-            if (!sn)
-                continue;
 
             // Add successor to rope
             int succ_rope_idx = static_cast<int>(rope.size());
@@ -477,7 +484,6 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
                 RegPath rp;
                 rp.src_reg_id = src_reg_id;
                 rp.dst_reg_id = succ;
-                rp.has_combinational = f.has_comb;
                 // Walk rope backward to build node_ids in order
                 rp.node_ids.reserve(f.on_path.size() + 1);
                 int idx = succ_rope_idx;
@@ -489,18 +495,147 @@ Graph::PathTraversalResult Graph::find_register_paths(uint64_t src_reg_id, size_
                 result.paths.push_back(std::move(rp));
                 if (result.paths.size() >= max_paths) {
                     result.truncated = true;
-                    return result;
+                    stop = true;
+                    break;
                 }
             } else if (is_data_node(sn->kind) && !expanded.count(succ)) {
                 Frame nf;
                 nf.node_id = succ;
                 nf.rope_idx = succ_rope_idx;
-                nf.has_comb = f.has_comb || (sn->kind == NodeKind::Combinational);
                 nf.on_path = f.on_path;  // copy the small set
                 nf.on_path.insert(succ);
                 stack.push_back(std::move(nf));
             }
         }
+    }
+
+    // A truncated traversal has not seen every path: no node is known to be
+    // on all of them, and any of them may pass logic.
+    if (result.truncated) {
+        for (auto& rp : result.paths) {
+            rp.common_node_ids = {rp.src_reg_id, rp.dst_reg_id};
+            rp.any_path_through_logic = true;
+        }
+        return result;
+    }
+
+    // The cone: the source, the expanded data nodes, the reached registers.
+    std::unordered_map<uint64_t, size_t> index;
+    std::vector<uint64_t> cone{src_reg_id};
+    index.emplace(src_reg_id, 0);
+    auto add_to_cone = [&](uint64_t id) {
+        if (index.emplace(id, cone.size()).second)
+            cone.push_back(id);
+    };
+    for (const auto& [from, to] : cone_edges) {
+        add_to_cone(from);
+        if (expanded.count(to) || reached.count(to))
+            add_to_cone(to);
+    }
+    const size_t n = cone.size();
+    std::vector<std::vector<size_t>> succs(n), preds(n);
+    for (const auto& [from, to] : cone_edges) {
+        auto t = index.find(to);
+        if (t == index.end())
+            continue;
+        size_t u = index.at(from);
+        succs[u].push_back(t->second);
+        preds[t->second].push_back(u);
+    }
+
+    // Postorder numbers from the source (iterative DFS).
+    std::vector<int> post(n, -1);
+    {
+        std::vector<bool> seen(n, false);
+        std::vector<std::pair<size_t, size_t>> dfs{{0, 0}};
+        seen[0] = true;
+        int counter = 0;
+        while (!dfs.empty()) {
+            auto& [v, next] = dfs.back();
+            if (next < succs[v].size()) {
+                size_t w = succs[v][next++];
+                if (!seen[w]) {
+                    seen[w] = true;
+                    dfs.emplace_back(w, 0);
+                }
+            } else {
+                post[v] = counter++;
+                dfs.pop_back();
+            }
+        }
+    }
+    std::vector<size_t> rpo;
+    rpo.reserve(n);
+    for (size_t v = 0; v < n; ++v)
+        if (post[v] >= 0)
+            rpo.push_back(v);
+    std::sort(rpo.begin(), rpo.end(), [&](size_t a, size_t b) { return post[a] > post[b]; });
+
+    // Immediate dominators (Cooper, Harvey, Kennedy, "A Simple, Fast
+    // Dominance Algorithm"): every path from the source to v passes idom[v].
+    const size_t none = n;
+    std::vector<size_t> idom(n, none);
+    idom[0] = 0;
+    auto intersect = [&](size_t a, size_t b) {
+        while (a != b) {
+            while (post[a] < post[b])
+                a = idom[a];
+            while (post[b] < post[a])
+                b = idom[b];
+        }
+        return a;
+    };
+    for (bool changed = true; changed;) {
+        changed = false;
+        for (size_t v : rpo) {
+            if (v == 0)
+                continue;
+            size_t new_idom = none;
+            for (size_t p : preds[v]) {
+                if (idom[p] == none)
+                    continue;
+                new_idom = new_idom == none ? p : intersect(p, new_idom);
+            }
+            if (new_idom != idom[v]) {
+                idom[v] = new_idom;
+                changed = true;
+            }
+        }
+    }
+
+    // Nodes reached from logic (a data node other than a net or a port).
+    std::vector<bool> after_logic(n, false);
+    {
+        std::vector<size_t> work;
+        for (size_t v = 1; v < n; ++v) {
+            const Node* node = find_node(cone[v]);
+            if (node && is_data_node(node->kind) && node->kind != NodeKind::Net &&
+                node->kind != NodeKind::Port) {
+                after_logic[v] = true;
+                work.push_back(v);
+            }
+        }
+        while (!work.empty()) {
+            size_t v = work.back();
+            work.pop_back();
+            for (size_t w : succs[v]) {
+                if (!after_logic[w]) {
+                    after_logic[w] = true;
+                    work.push_back(w);
+                }
+            }
+        }
+    }
+
+    for (auto& rp : result.paths) {
+        size_t d = index.at(rp.dst_reg_id);
+        rp.any_path_through_logic = after_logic[d];
+        for (size_t v = d; idom[v] != none; v = idom[v]) {
+            rp.common_node_ids.push_back(cone[v]);
+            if (v == 0)
+                break;
+        }
+        std::reverse(rp.common_node_ids.begin(), rp.common_node_ids.end());
     }
 
     return result;

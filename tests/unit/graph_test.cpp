@@ -187,3 +187,61 @@ TEST(GraphTest, RegisterPathLimitBoundsFanout) {
     EXPECT_TRUE(result.truncated);
     EXPECT_EQ(result.paths.size(), 5u);
 }
+
+// One register reaches another by a wire-only path and by a path through
+// logic (a register assigned bit by bit: one bit copied, one decoded). The
+// result describes every path, whichever the traversal meets first.
+TEST(GraphTest, RegisterPathPropertiesCoverEveryPath) {
+    for (bool wire_first : {true, false}) {
+        Graph graph;
+        uint64_t src = graph.add_register("top.src", "clk_a", 2, {"t.sv", 1, 1});
+        uint64_t dst = graph.add_register("top.dst", "clk_b", 2, {"t.sv", 2, 1});
+        uint64_t wire = graph.add_net("top.w", 1, {"t.sv", 3, 1});
+        uint64_t gate = graph.add_combinational("top.x", LogicType::Xor, {src}, 1, {"t.sv", 4, 1});
+        for (uint64_t mid :
+             wire_first ? std::vector<uint64_t>{wire, gate} : std::vector<uint64_t>{gate, wire})
+            graph.add_edge(src, mid);
+        graph.add_edge(wire, dst);
+        graph.add_edge(gate, dst);
+
+        auto result = graph.find_register_paths(src);
+        ASSERT_EQ(result.paths.size(), 1u) << "wire_first=" << wire_first;
+        const auto& path = result.paths[0];
+        EXPECT_EQ(path.dst_reg_id, dst);
+        EXPECT_TRUE(path.any_path_through_logic) << "wire_first=" << wire_first;
+        // Neither middle node is on every path.
+        EXPECT_EQ(path.common_node_ids, (std::vector<uint64_t>{src, dst}))
+            << "wire_first=" << wire_first;
+    }
+}
+
+// Two paths split after a node and meet again in front of the destination:
+// the nodes on every path are the split point and the meeting point.
+TEST(GraphTest, RegisterPathCommonNodesAreOnEveryPath) {
+    for (bool left_first : {true, false}) {
+        Graph graph;
+        uint64_t src = graph.add_register("top.src", "clk_a", 1, {"t.sv", 1, 1});
+        uint64_t dst = graph.add_register("top.dst", "clk_b", 1, {"t.sv", 2, 1});
+        uint64_t split = graph.add_net("top.split", 1, {"t.sv", 3, 1});
+        uint64_t left = graph.add_net("top.left", 1, {"t.sv", 4, 1});
+        uint64_t right_a = graph.add_net("top.right_a", 1, {"t.sv", 5, 1});
+        uint64_t right_b = graph.add_net("top.right_b", 1, {"t.sv", 6, 1});
+        uint64_t join = graph.add_net("top.join", 1, {"t.sv", 7, 1});
+        graph.add_edge(src, split);
+        if (left_first)
+            graph.add_edge(split, left);
+        graph.add_edge(split, right_a);
+        if (!left_first)
+            graph.add_edge(split, left);
+        graph.add_edge(right_a, right_b);
+        graph.add_edge(left, join);
+        graph.add_edge(right_b, join);
+        graph.add_edge(join, dst);
+
+        auto result = graph.find_register_paths(src);
+        ASSERT_EQ(result.paths.size(), 1u);
+        EXPECT_FALSE(result.paths[0].any_path_through_logic);
+        EXPECT_EQ(result.paths[0].common_node_ids, (std::vector<uint64_t>{src, split, join, dst}))
+            << "left_first=" << left_first;
+    }
+}

@@ -176,8 +176,17 @@ class Graph {
     struct RegPath {
         uint64_t src_reg_id;
         uint64_t dst_reg_id;
+        // One shortest path (src first, dst last), for the report.
         std::vector<uint64_t> node_ids;
-        bool has_combinational;
+        // The nodes on every path from src to dst, in path order (src first,
+        // dst last): the dominators of dst in the cone of src. A check that
+        // must hold for the crossing as a whole (a false path -through, a
+        // safe black box) uses these, so it does not depend on which path
+        // the traversal met first. Only src and dst when truncated.
+        std::vector<uint64_t> common_node_ids;
+        // Some path passes a data node other than a net or a port (logic);
+        // true when truncated.
+        bool any_path_through_logic = false;
     };
 
     struct PathTraversalResult {

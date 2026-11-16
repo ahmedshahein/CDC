@@ -726,3 +726,97 @@ TEST_F(CrossingTest, BlackboxDoesNotMatchDatapathNamedLikePrimitive) {
     }
     EXPECT_TRUE(found_error);
 }
+
+namespace {
+// src (clk_a) reaches dst (clk_b) by two paths that meet at a gate in front
+// of dst: one through `via` (e.g. a node of a black-box instance), one
+// around it. `via_first` decides which edge is added first, so a traversal
+// meets the two paths in either order.
+struct TwoPaths {
+    uint64_t src;
+    uint64_t dst;
+};
+TwoPaths add_two_paths(Graph& graph, bool via_first, const std::string& via_module_type) {
+    uint64_t src = graph.add_register("top.src_ff", "clk_a", 1, {"t.sv", 1, 1}, "top", "top");
+    uint64_t dst = graph.add_register("top.dst_ff", "clk_b", 1, {"t.sv", 9, 1}, "top", "top");
+    graph.find_node_mutable(src)->reset_signal = "rst_n";
+    graph.find_node_mutable(dst)->reset_signal = "rst_n";
+    uint64_t via = graph.add_net("top.u_via.q", 1, {"t.sv", 3, 1}, "top.u_via", via_module_type);
+    uint64_t around = graph.add_net("top.around", 1, {"t.sv", 4, 1}, "top", "top");
+    uint64_t join =
+        graph.add_combinational("top.join", LogicType::Or, {via, around}, 1, {"t.sv", 5, 1});
+    graph.add_edge(src, via_first ? via : around);
+    graph.add_edge(src, via_first ? around : via);
+    graph.add_edge(via, join);
+    graph.add_edge(around, join);
+    graph.add_edge(join, dst);
+    return {src, dst};
+}
+
+bool has_error(const std::vector<Finding>& findings, const std::string& rule) {
+    for (const auto& f : findings)
+        if (f.rule_id == rule && f.severity == "error" && !f.suppressed_by_false_path)
+            return true;
+    return false;
+}
+}  // namespace
+
+// A safe black box on one of two paths does not synchronize the other: the
+// crossing stays an error whichever path the traversal meets first.
+TEST(CrossingPathTest, SafeBlackBoxOnOnePathDoesNotSuppress) {
+    for (bool via_first : {true, false}) {
+        Graph graph;
+        add_two_paths(graph, via_first, "xpm_cdc_gray");
+        BlackBoxRegistry registry;
+        CrossingAnalyzer analyzer;
+        analyzer.set_blackbox_registry(&registry);
+        DomainExtractor extractor;
+        auto dr = extractor.extract(graph);
+        auto findings = analyzer.analyze(graph, dr.domains, dr.register_to_domain);
+        EXPECT_TRUE(has_error(findings, "CDC001")) << "via_first=" << via_first;
+        for (const auto& f : findings)
+            EXPECT_NE(f.safety_provenance, "Path through safe black box module")
+                << "via_first=" << via_first;
+    }
+}
+
+// A false path -through a point on one of two paths leaves the other path
+// timed: the crossing stays an error whichever path is met first.
+TEST(CrossingPathTest, FalsePathThroughOnePathDoesNotSuppress) {
+    for (bool via_first : {true, false}) {
+        Graph graph;
+        add_two_paths(graph, via_first, "top");
+        opencdc::clock::ClockConstraints constraints;
+        opencdc::clock::FalsePath fp;
+        fp.through = {"top.u_via.q"};
+        constraints.false_paths.push_back(fp);
+        CrossingAnalyzer analyzer;
+        analyzer.set_clock_constraints(&constraints);
+        DomainExtractor extractor;
+        auto dr = extractor.extract(graph);
+        auto findings = analyzer.analyze(graph, dr.domains, dr.register_to_domain);
+        EXPECT_TRUE(has_error(findings, "CDC001")) << "via_first=" << via_first;
+    }
+}
+
+// A -through point on every path still makes the crossing a false path.
+TEST(CrossingPathTest, FalsePathThroughEveryPathSuppresses) {
+    for (bool via_first : {true, false}) {
+        Graph graph;
+        add_two_paths(graph, via_first, "top");
+        opencdc::clock::ClockConstraints constraints;
+        opencdc::clock::FalsePath fp;
+        fp.through = {"top.join"};
+        constraints.false_paths.push_back(fp);
+        CrossingAnalyzer analyzer;
+        analyzer.set_clock_constraints(&constraints);
+        DomainExtractor extractor;
+        auto dr = extractor.extract(graph);
+        auto findings = analyzer.analyze(graph, dr.domains, dr.register_to_domain);
+        EXPECT_FALSE(has_error(findings, "CDC001")) << "via_first=" << via_first;
+        bool suppressed = false;
+        for (const auto& f : findings)
+            suppressed = suppressed || f.suppressed_by_false_path;
+        EXPECT_TRUE(suppressed) << "via_first=" << via_first;
+    }
+}

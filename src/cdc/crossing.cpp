@@ -156,8 +156,10 @@ std::vector<Finding> CrossingAnalyzer::analyze(
                 ctx.destination_cell = dst->hier_name;
                 ctx.source_pin = src->hier_name;
                 ctx.destination_pin = dst->hier_name;
+                // The nodes on every path: a -through point on only one of
+                // two paths leaves the other one timed.
                 ctx.path_nodes.clear();
-                for (auto nid : reg_path.node_ids) {
+                for (auto nid : reg_path.common_node_ids) {
                     const ir::Node* n = graph.find_node(nid);
                     if (n)
                         ctx.path_nodes.push_back(n->hier_name);
@@ -191,8 +193,9 @@ std::vector<Finding> CrossingAnalyzer::analyze(
                 continue;
             }
 
-            // Blackbox suppression: safe black box on path handles sync.
-            if (is_path_through_safe_blackbox(graph, reg_path.node_ids)) {
+            // Blackbox suppression: a safe black box on every path handles
+            // sync (one on a single path does not synchronize the others).
+            if (is_path_through_safe_blackbox(graph, reg_path.common_node_ids)) {
                 Finding bb;
                 bb.rule_id = "CDC001";
                 bb.rule_name = "unsynchronized_crossing";
@@ -232,18 +235,10 @@ std::vector<Finding> CrossingAnalyzer::analyze(
             // A gray-coded source changes one bit per cycle, so a chain of
             // destination-wide stages synchronizes it (async-FIFO pointers) -
             // if the code arrives unchanged: only nets and ports between the
-            // registers. Logic on the path (a gray-to-binary decoder) makes
-            // the crossing a plain multi-bit one.
-            bool wire_path = true;
-            for (size_t i = 1; i + 1 < reg_path.node_ids.size(); ++i) {
-                const ir::Node* n = graph.find_node(reg_path.node_ids[i]);
-                if (!n || (n->kind != ir::NodeKind::Net && n->kind != ir::NodeKind::Port)) {
-                    wire_path = false;
-                    break;
-                }
-            }
+            // registers, on every path. Logic on any path (a gray-to-binary
+            // decoder) makes the crossing a plain multi-bit one.
             const bool gray_source =
-                wire_path &&
+                !reg_path.any_path_through_logic &&
                 (src->is_gray_coded ||
                  (pattern_recognizer_ && pattern_recognizer_->is_gray_coded(src_id, graph)));
             f.detected_sync = sync_matcher_.find_pattern_for_dest(dst_id, graph, true, gray_source);
@@ -349,7 +344,8 @@ std::vector<Finding> CrossingAnalyzer::analyze(
             // can still be a multi-bit hazard (per-bit skew), and gated /
             // muxed / reset properties apply regardless of sync chains.
 
-            bool safe_crossing = is_safe_multi_bit_crossing(src_id, dst_id, graph, wire_path);
+            bool safe_crossing =
+                is_safe_multi_bit_crossing(src_id, dst_id, graph, !reg_path.any_path_through_logic);
 
             if (src->width > 1 && !safe_crossing) {
                 Finding mb;
