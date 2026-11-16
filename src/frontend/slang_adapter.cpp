@@ -72,14 +72,13 @@ static std::string sv_to_string(std::string_view sv) {
 
 // Width of a signal of type `t` in bits. getBitWidth() is zero for every
 // non-numeric type - unpacked arrays, unpacked structs and unions - so
-// those take their $bits; a type with no static size (dynamic array, queue,
-// string) counts as one bit. A graph node never gets width zero.
+// those take their $bits. Zero for a type with no static size (dynamic
+// array, queue, associative array, string, class handle, event): no
+// hardware signal, removed from the graph by drop_unsized_signals().
 static uint32_t type_width(const Type& t) {
     uint64_t width = t.getBitWidth();
     if (width == 0)
         width = t.getBitstreamWidth();
-    if (width == 0)
-        return 1;
     return static_cast<uint32_t>(std::min<uint64_t>(width, UINT32_MAX));
 }
 
@@ -1529,6 +1528,7 @@ FrontendResult SlangAdapter::elaborate(const std::vector<std::string>& files,
         result.errors.push_back("IR graph exceeded node or edge safety limit; analysis incomplete");
         return result;
     }
+    drop_unsized_signals(result);
     resolve_clocks(result.graph);
     auto validation = result.graph.validate();
     if (!validation.ok()) {
@@ -1601,6 +1601,27 @@ void SlangAdapter::resolve_resets(ir::Graph& graph) {
         if (auto* reg = graph.find_node_mutable(reg_id))
             reg->reset_signal = source;
     }
+}
+
+// A signal without a static bit width (type_width() zero) is no hardware: it
+// is not modelled as a signal of some guessed width. Its node and edges are
+// removed, each one is named in a warning, and the result lists them, so
+// the analyzer reports the run incomplete - a crossing through such a
+// signal is not analyzed.
+void SlangAdapter::drop_unsized_signals(FrontendResult& result) {
+    std::vector<uint64_t> unsized;
+    for (const auto& node : result.graph.nodes()) {
+        if (node.width != 0)
+            continue;
+        unsized.push_back(node.id);
+        result.unsized_signals.push_back(node.hier_name);
+        frontend_warnings_.push_back("Signal '" + node.hier_name +
+                                     "' has no static bit width (dynamic array, queue, string, "
+                                     "class handle or another unsupported type): not modelled, "
+                                     "crossings through it are not analyzed");
+    }
+    if (!unsized.empty())
+        result.graph.remove_nodes(unsized);
 }
 
 void SlangAdapter::walk_instance(const InstanceSymbol& inst, ir::Graph& graph,

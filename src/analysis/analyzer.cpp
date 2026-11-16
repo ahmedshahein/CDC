@@ -1,6 +1,8 @@
 #include "analysis/analyzer.h"
 
+#include <algorithm>
 #include <memory>
+#include <string>
 
 #include "cdc/blackbox.h"
 #include "cdc/cdc006.h"
@@ -89,7 +91,8 @@ AnalysisResult Analyzer::run(const AnalysisRequest& request) {
     }
     ir::Graph graph = std::move(fe_result.graph);
     std::vector<std::string> fe_warnings = std::move(fe_result.warnings);
-    bool incomplete_frontend = fe_result.suspected_sequential_unknown;
+    bool incomplete_frontend =
+        fe_result.suspected_sequential_unknown || !fe_result.unsized_signals.empty();
 
     AnalysisResult result = run_on_graph(std::move(graph), request, std::move(cfg));
     // Frontend warnings (e.g. skipped unknown-clock blocks) travel with the result.
@@ -111,6 +114,14 @@ AnalysisResult Analyzer::run(const AnalysisRequest& request) {
         result.signoff =
             signoff_engine.evaluate(result.findings, result.analysis_status, config::Config{},
                                     request.profile.empty() ? "default" : request.profile);
+        bool truncated = std::any_of(result.findings.begin(), result.findings.end(),
+                                     [](const cdc::Finding& f) { return f.rule_id == "CDC010"; });
+        if (!fe_result.unsized_signals.empty() && !fe_result.suspected_sequential_unknown &&
+            !truncated && result.signoff.status == SignoffStatus::Incomplete) {
+            result.signoff.reason = "Analysis incomplete — " +
+                                    std::to_string(fe_result.unsized_signals.size()) +
+                                    " signal(s) without a static bit width not modeled";
+        }
     }
     return result;
 }

@@ -66,6 +66,7 @@ class SlangAdapter : public IFrontend {
     std::optional<ir::SourceLoc> to_source_loc(const slang::SourceLocation& loc) const;
 
     void resolve_clocks(ir::Graph& graph);
+    void drop_unsized_signals(FrontendResult& result);
 
     static void propagate_gray_captures(ir::Graph& graph);
 

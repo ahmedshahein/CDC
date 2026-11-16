@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <string>
 
 #include "cdc/cdc006.h"
@@ -1100,6 +1101,28 @@ TEST(FrontendTest, UnpackedArrayWithVariableIndexStaysOneNode) {
         error = error || (f.rule_id == "CDC001" && f.dest_reg_name == "uarr_mixed.b_r" &&
                           f.severity == "error");
     EXPECT_TRUE(error);
+}
+
+TEST(FrontendTest, SignalsWithoutStaticWidthAreNotModelled) {
+    // A queue, a dynamic array and a string are no hardware: no graph node
+    // (they were 1-bit registers), one warning each, listed in the result.
+    opencdc::frontend::SlangAdapter adapter;
+    auto fe = adapter.elaborate({fixture_path("unsized_types.sv")}, "unsized_types");
+    ASSERT_TRUE(fe.ok);
+    for (const std::string name :
+         {"unsized_types.hist_q", "unsized_types.dyn", "unsized_types.tag"}) {
+        EXPECT_EQ(fe.graph.find_node_by_name(name), nullptr) << name;
+        EXPECT_NE(std::find(fe.unsized_signals.begin(), fe.unsized_signals.end(), name),
+                  fe.unsized_signals.end())
+            << name;
+        bool warned = false;
+        for (const auto& w : fe.warnings)
+            warned =
+                warned || w.find("'" + name + "' has no static bit width") != std::string::npos;
+        EXPECT_TRUE(warned) << name;
+    }
+    EXPECT_EQ(fe.unsized_signals.size(), 3u);
+    EXPECT_EQ(fe.graph.register_count(), 2u);  // a_r and q
 }
 
 TEST(FrontendTest, ParameterIsNoSignal) {

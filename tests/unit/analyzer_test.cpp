@@ -292,3 +292,26 @@ TEST_F(AnalyzerTest, AnalysisStatusCompleteOnSuccess) {
     ASSERT_TRUE(result.ok);
     EXPECT_EQ(result.analysis_status, "complete");
 }
+
+TEST_F(AnalyzerTest, SignalsWithoutStaticWidthMakeTheAnalysisIncomplete) {
+    // A queue, a dynamic array and a string are not modelled, so a crossing
+    // through them is not analyzed: the run cannot sign off as complete.
+    // The fixed-size crossing a_r -> q is still reported.
+    AnalysisRequest req;
+    req.input_files = {fixture_path("unsized_types.sv")};
+    req.top_module = "unsized_types";
+    auto result = analyzer.run(req);
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(result.analysis_status, "incomplete");
+    EXPECT_EQ(result.signoff.status, opencdc::analysis::SignoffStatus::Incomplete);
+    EXPECT_NE(result.signoff.reason.find("3 signal(s) without a static bit width"),
+              std::string::npos)
+        << result.signoff.reason;
+    bool crossing = false;
+    for (const auto& f : result.findings) {
+        EXPECT_NE(f.dest_reg_name, "unsized_types.hist_q");
+        crossing = crossing || (f.rule_id == "CDC001" && f.source_reg_name == "unsized_types.a_r" &&
+                                f.dest_reg_name == "unsized_types.q" && f.severity == "error");
+    }
+    EXPECT_TRUE(crossing);
+}

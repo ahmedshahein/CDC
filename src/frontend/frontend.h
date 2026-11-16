@@ -55,6 +55,11 @@ struct FrontendResult {
     // cannot be "complete"; the analyzer downgrades status to "incomplete"
     // (signoff INCOMPLETE) instead of silently under-reporting.
     bool suspected_sequential_unknown = false;
+    // RTL frontend: signals without a static bit width (dynamic arrays,
+    // queues, strings, class handles) are not modelled - removed from the
+    // graph, so a crossing through one is not analyzed; the analyzer
+    // downgrades status to "incomplete" as above and names them.
+    std::vector<std::string> unsized_signals;
 };
 
 // Common contract for all language frontends (slang RTL, gate-level netlist).
