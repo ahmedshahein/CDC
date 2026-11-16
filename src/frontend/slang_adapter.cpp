@@ -1388,6 +1388,30 @@ std::optional<ir::SourceLoc> SlangAdapter::to_source_loc(const slang::SourceLoca
     return result;
 }
 
+// The thread-local state the walk's free functions keep across recursion
+// (reset() lists it), cleared when elaborate() starts and again when it
+// ends - an exception included - so nothing of one run reaches the next and
+// no pointer into a destroyed compilation outlives it. The scope paths and
+// split arrays have guards of their own (ScopePathsGuard, SplitArraysGuard).
+class WalkStateGuard {
+   public:
+    WalkStateGuard() {
+        reset();
+    }
+    ~WalkStateGuard() {
+        reset();
+    }
+    WalkStateGuard(const WalkStateGuard&) = delete;
+    WalkStateGuard& operator=(const WalkStateGuard&) = delete;
+
+   private:
+    static void reset() {
+        g_loop_values.clear();
+        g_control_operands.clear();
+        g_async_reset_symbol = nullptr;
+    }
+};
+
 SlangAdapter::SlangAdapter() : source_manager_(std::make_unique<SourceManager>()) {}
 
 SlangAdapter::~SlangAdapter() = default;
@@ -1395,6 +1419,7 @@ SlangAdapter::~SlangAdapter() = default;
 FrontendResult SlangAdapter::elaborate(const std::vector<std::string>& files,
                                        const std::string& top_module,
                                        const FrontendOptions& options) {
+    WalkStateGuard walk_state;
     FrontendResult result;
     result.input_type = "rtl";
     Compilation compilation;
